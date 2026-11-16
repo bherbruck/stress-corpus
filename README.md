@@ -1,16 +1,32 @@
 # Stress corpus
 
-10,000 everyday objects, each described in one plain sentence with real millimetre sizes. Build them in SolidCraft and/or Fusion, convert with Dutchman, compare the results, and file every failure where the bug lives. The goal is to find and fix bugs.
+10,000 small modelling tasks, each one a plain sentence with real millimetre sizes. Build them in SolidCraft and/or Fusion, convert with Dutchman, compare the results, and file every failure where the bug lives. The goal is to find and fix bugs.
 
-Example:
+The tasks come from what a modelling kernel has to handle, not from a list of objects: an operation, on a type of surface, in a tricky topology situation, at an unusual scale, in a particular order. A few items carry an everyday object name ("Like a ring: ...") as flavour only.
 
-> S0001 · wall bracket · hole pattern · small · easy: A 2 mm stainless steel wall bracket, modelled from a 35 × 24 mm flat sheet. Drill 4 through holes of Ø3 mm in a 2 × 2 grid, 24.5 mm apart in X and 17 mm apart in Y, centred on the top face.
+Example (`S0263 · fillet (variable) × torus × tangent edges × tiny × before shell`):
 
-The list is in `items.jsonl` (one JSON line per item: `id, category, features, size, difficulty, brief`). `gen.py` makes it from a fixed seed (category × feature mix × size × difficulty), so anyone can regenerate the exact same file with `python3 gen.py`.
+> Like a ring: model the upper half (Z ≥ 0) of a torus about the Z axis: centre-circle Ø3.6 mm, tube Ø1.2 mm, cut by the plane Z = 0, so the body has a flat annular face at Z = 0. (1) Add a Ø0.14 mm boss, 0.14 mm tall, on the flat cut face with its centre 0.53 mm from the point on the centre circle of the flat cut face at +X (X = 1.8 mm, Y = 0) toward +X, so its side is exactly tangent to the face's outer edge. (2) Fillet both edge loops (inner and outer circle) of the flat cut face with a variable radius: 0.084 mm at the +X point, rising linearly to 0.168 mm at the opposite point. (3) Hollow the body to 0.072 mm walls leaving a closed internal void (no face removed).
+
+## The axes
+
+Every item is one value from each axis. The first 196 items (`"pairwise": true`) are an all-pairs set: every feasible pair of values from two different axes appears in at least one of them (784 pairs). The other 9,804 are random extra combinations. Pairs that cannot be built (for example a sheet-metal bend on a sphere) are left out.
+
+| Axis | Values |
+|---|---|
+| operation | extrude, cut, revolve, sweep, loft, shell, fillet (constant), fillet (variable), chamfer, draft, pattern (linear), pattern (circular), pattern (along a path), mirror, boolean join, boolean cut, boolean intersect, thread, sheet-metal flange, sheet-metal bend, split, offset face |
+| surface | plane, cylinder, cone, sphere, torus, spline |
+| topology | clean, tangent edges, coplanar faces, vertex on an edge, thin wall near tolerance, feature at a seam or pole, self-touching body, multiple bodies, edge chain around a corner |
+| scale | tiny (features under 1 mm), normal, huge (over 1 m), extreme ratio (1000:1) |
+| order | none, before fillet, after fillet, before shell, after shell, before pattern, after pattern |
+
+To propose a new value (or a new axis), open an issue titled "Axis: <name>" with the value, one example brief with real dimensions, and what it would catch. If it is accepted, the new items are generated as extra batches after the last one; existing IDs never change.
+
+`items.jsonl` has one JSON line per item: `id, operation, surface, topology, scale, order, object, pairwise, brief`. `gen.py` writes it from a fixed seed, so `python3 gen.py` reproduces the exact same file.
 
 ## Take part
 
-1. Open the issues labelled `batch`. Each one is a batch of about 100 items: "Batch 07: S0601–S0700".
+1. Open the issues labelled `batch`. Each is a batch of 100 items: "Batch 07: S0601–S0700".
 2. Claim one by assigning it to yourself. Only collaborators can be assigned, so if you are not one yet, comment "claiming" and a maintainer will assign you.
 3. Work through the items and tick each box as you finish it.
 4. Close the batch issue when every box is ticked.
@@ -43,7 +59,7 @@ File every failure as its own issue in the repo where the bug lives, and put the
 - Dutchman converted it wrongly: `dutchman-cad/dutchman`
 - The file reader or writer is at fault: `cadmpeg/cadmpeg`
 
-Before you file, search that repo for an existing issue about the same problem (search the symptom and the feature name). If one exists, comment on it with the item ID instead of opening a new one.
+Before you file, search that repo for an existing issue about the same problem (search the symptom and the operation name). If one exists, comment on it with the item ID instead of opening a new one.
 
 ## Fusion files stay private
 
