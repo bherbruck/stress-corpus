@@ -385,7 +385,8 @@ function sankey(){
   $("isnote").textContent=n(f.run)+" items run: "+n(f.pass)+" passed, "+n(f.fail)+" failed, "+n(f.skip)+" skipped. "+n(f.cov)+" of the failed items are covered by "+f.ni+" issues and "+n(f.unf)+" are not yet filed. Left of the dashed line the bands count items; right of it they count issues. "+f.pr+" issues have a fix pull request: "+f.merged+" merged, "+f.open+" open, "+f.closed+" closed without merging. A fix pull request is one that says it fixes the issue or is cross-referenced from it. "+(D.issues.updated?"Checked "+D.issues.updated+".":"");
 }
 function issueTable(){
-  var L=(D.issues&&D.issues.issues)||[];
+  // Biggest first: issues covering the most items at the top (contributor's ask, 2026-11-17).
+  var L=((D.issues&&D.issues.issues)||[]).slice().sort(function(a,b){return b.items.length-a.items.length||a.number-b.number});
   if(!L.length){$("istable").innerHTML="<tr><td>No issues yet.</td></tr>";return}
   var h='<tr><th class="l">Issue</th><th class="l">Title</th><th>Items</th><th class="l">PR</th><th>State</th></tr>';
   L.forEach(function(i){
