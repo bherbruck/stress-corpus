@@ -106,6 +106,8 @@ Add a pull request with `results/<batch>.jsonl` (for example `results/batch-07.j
 - `link`: an existing issue or PR for the failure, empty otherwise
 - `signature`, `measured`, `build`: see Failures below
 
+**Checks on a results PR.** CI refuses a results PR that changes anything except `results/batch-NN.jsonl`, adds design files, exports or images, comes from someone who hasn't claimed that batch, lists items outside the batch, or has lines that fail `tools/check_results.py`. Each error names the file and line.
+
 ## Failures
 
 Do not file bugs upstream yourself. Put every failure in your results pull request, with its `signature`. Maintainers group failures by cause and file one issue per cause, so you do not need to search other repos or shrink items.
