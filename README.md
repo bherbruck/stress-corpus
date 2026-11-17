@@ -107,8 +107,19 @@ Add a pull request with `results/<batch>.jsonl` (for example `results/batch-07.j
 - `version`: the SolidCraft release or commit, or the Dutchman version, so a result can be rerun on a newer build
 - `link`: an existing issue or PR for the failure, empty otherwise
 - `signature`, `measured`, `build`: see Failures below
+- `rerun_of` (optional, a string): the earlier build this line checks again, for example `"solidcraft 0.43.0"`. See Check again on a newer build below.
 
 **Checks on a results PR.** CI refuses a results PR that changes anything except `results/batch-NN.jsonl`, adds design files, exports or images, comes from someone who hasn't claimed that batch, lists items outside the batch, or has lines that fail `tools/check_results.py`. Each error names the file and line.
+
+## Check again on a newer build
+
+When a newer build may have fixed a failure, run the failed items again and record the new result with `rerun_of` set to the `version` (or `build`) of the result you are re-checking:
+
+```json
+{"id": "S0602", "pipeline": "solidcraft", "outcome": "correct", "version": "solidcraft 0.44.0", "rerun_of": "solidcraft 0.43.0", "link": ""}
+```
+
+The results page shows a "Fixed since" section: items that failed on the earlier build and pass on the newer one, grouped by cause or issue. A line with `rerun_of` replaces the earlier result in the grid and totals. Keep the earlier line as it is.
 
 ## Failures
 

@@ -9,6 +9,10 @@ import os
 import sys
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from cluster import display, kind, normalise  # noqa: E402
+from common import FAILURES  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AXES = ["operation", "surface", "topology", "gap", "placement", "scale", "order"]
 OUTCOMES = ["correct", "correct-refusal", "wrong-result", "wrong-refusal", "hang", "crash", "skipped"]
@@ -36,6 +40,8 @@ def build():
     rows = [[it["id"]] + [pos[a][it[a]] for a in AXES] + [short_brief(it.get("brief"))] for it in items]
 
     results = {}
+    earlier = {}   # (pipeline, id) -> every first-run record
+    reruns = []
     for path in sorted(glob.glob(os.path.join(ROOT, "results", "*.jsonl"))):
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -45,9 +51,14 @@ def build():
                 n = index.get(r.get("id"))
                 if n is None or r.get("outcome") not in OUTCOMES:
                     continue
-                sig = short_brief(r.get("signature") or "", 160)
-                results.setdefault(r.get("pipeline") or "solidcraft", {})[str(n)] = [
-                    OUTCOMES.index(r["outcome"]), sig, r.get("link") or ""]
+                if r.get("rerun_of"):
+                    reruns.append(r)
+                else:
+                    earlier.setdefault((r.get("pipeline") or "solidcraft", r["id"]), []).append(r)
+                    put(results, index, r)
+    for r in reruns:  # a re-check is newer than the result it re-checks
+        put(results, index, r)
+    issues = load_issues()
     return {
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "batch": BATCH,
@@ -56,8 +67,69 @@ def build():
         "values": values,
         "items": rows,
         "results": results,
+        "issues": issues,
+        "fixed": fixed_since(reruns, earlier, issues),
         "repo": REPO,
     }
+
+
+def put(results, index, r):
+    sig = short_brief(r.get("signature") or "", 160)
+    results.setdefault(r.get("pipeline") or "solidcraft", {})[str(index[r["id"]])] = [
+        OUTCOMES.index(r["outcome"]), sig, r.get("link") or ""]
+
+
+def load_issues():
+    try:
+        with open(os.path.join(ROOT, "site", "issues.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {"updated": "", "issues": []}
+
+
+def cause_of(rec, known_urls):
+    """Name the cause behind a failing result: its issue when it has one, else its signature."""
+    key = " | ".join((rec.get("pipeline", ""), kind(rec["outcome"]), normalise(rec.get("signature") or "")))
+    urls = known_urls.get(key, [])
+    if rec.get("link"):
+        urls = [rec["link"]]
+    if urls:
+        return urls[0], urls[0], ""
+    return key, "", display(rec.get("signature") or "") or rec["outcome"]
+
+
+def fixed_since(reruns, earlier, issues):
+    """Items that failed on an earlier build and pass on the build a re-run used."""
+    try:
+        with open(os.path.join(ROOT, "known.json"), encoding="utf-8") as f:
+            known_urls = {k: str(v).split() for k, v in json.load(f).items()}
+    except (OSError, ValueError):
+        known_urls = {}
+    titles = {i["url"]: "%s#%d %s" % (i["repo"].split("/")[1], i["number"], i["title"])
+              for i in issues.get("issues", [])}
+    groups, checked, still = {}, 0, 0
+    for r in reruns:
+        pipe = r.get("pipeline") or "solidcraft"
+        olds = [o for o in earlier.get((pipe, r["id"]), []) if o.get("outcome") in FAILURES]
+        want = str(r["rerun_of"]).strip().lower()
+        match = [o for o in olds if want in (str(o.get("version", "")).lower(), str(o.get("build", "")).lower())]
+        old = (match or olds or [None])[-1]
+        if old is None:
+            continue
+        checked += 1
+        if r["outcome"] not in ("correct", "correct-refusal"):
+            still += 1
+            continue
+        key, url, text = cause_of(old, known_urls)
+        to = r.get("build") or r.get("version") or ""
+        g = groups.setdefault((pipe, key, str(r["rerun_of"]), to), {
+            "pipeline": pipe, "issue": url, "cause": titles.get(url) or text or url,
+            "from": str(r["rerun_of"]), "to": to, "items": []})
+        g["items"].append(r["id"])
+    out = sorted(groups.values(), key=lambda g: (-len(g["items"]), g["cause"]))
+    for g in out:
+        g["items"].sort()
+    return {"checked": checked, "still": still, "groups": out}
 
 
 def main():
@@ -136,9 +208,14 @@ svg text{fill:var(--mut);font-size:10px}
 <div class="tot" id="totals"></div>
 <p class="mut" id="totnote"></p>
 
-<h2>Do the fails go down as we go?</h2>
-<p class="mut">Fail rate for each batch, in batch order: (wrong result + wrong refusal + hang + crash) divided by tasks done. Batches with nothing done are left empty.</p>
-<div class="card"><svg id="trend" viewBox="0 0 600 150" width="100%" role="img" aria-label="Fail rate per batch"></svg></div>
+<h2>Issues from the corpus</h2>
+<p class="mut" id="isnote"></p>
+<div class="card"><svg id="sankey" viewBox="0 0 760 300" width="100%" role="img" aria-label="Issues filed, how many have a fix pull request, and what became of those pull requests"></svg></div>
+<div class="card scroll" style="margin-top:8px"><table id="istable"></table></div>
+
+<h2>Fixed since</h2>
+<p class="mut" id="fxnote"></p>
+<div class="card scroll"><table id="fixed"></table></div>
 
 <h2>Where the fails are</h2>
 <p class="mut">Fail rate by operation and topology: fails out of done. A dash means nothing has been run there yet. Only tasks with a result count.</p>
@@ -239,19 +316,62 @@ function totals(){
   $("totals").innerHTML=cards.map(function(x){return"<div><span class=mut>"+x[0]+"</span><b>"+esc(x[1])+"</b></div>"}).join("");
   $("totnote").textContent="Done means built or refused, with an outcome other than skipped. Skipped tasks are left out of every rate.";
 }
-function trend(){
-  var rows=Math.ceil(N/B),W=600,H=150,l=30,b=18,t=8,bw=(W-l-4)/rows,s=[];
-  var data=[],mx=0.05;
-  for(var r=0;r<rows;r++){var d=0,f=0;for(var n=r*B;n<Math.min(N,(r+1)*B);n++){var x=res(n);if(isDone(x)){d++;if(FAILS[x[0]])f++}}
-    data.push([d,f]);if(d&&f/d>mx)mx=f/d}
-  mx=Math.min(1,Math.ceil(mx*10)/10);
-  var ph=H-b-t;
-  [0,.5,1].forEach(function(q){var y=t+ph*(1-q);s.push('<line x1="'+l+'" x2="'+W+'" y1="'+y+'" y2="'+y+'" stroke="'+css("--line")+'"/><text x="'+(l-4)+'" y="'+(y+3)+'" text-anchor="end">'+Math.round(q*mx*100)+'%</text>')});
-  data.forEach(function(d,r){var x=l+r*bw;
-    if(d[0]){var h=ph*(d[1]/d[0])/mx;s.push('<rect x="'+x+'" y="'+(t+ph-h)+'" width="'+Math.max(bw-1,1)+'" height="'+Math.max(h,1)+'" fill="'+css("--fail")+'"><title>Batch '+(r+1)+': '+d[1]+' of '+d[0]+' failed ('+pct(d[1],d[0])+')</title></rect>')}
-    else s.push('<rect x="'+x+'" y="'+(t+ph-1)+'" width="'+Math.max(bw-1,1)+'" height="1" fill="'+css("--none")+'"/>')});
-  [1,25,50,75,100].forEach(function(r){if(r<=rows)s.push('<text x="'+(l+(r-.5)*bw)+'" y="'+(H-4)+'" text-anchor="middle">'+r+'</text>')});
-  $("trend").innerHTML=s.join("");
+function issueFlows(){
+  var L=(D.issues&&D.issues.issues)||[],f={n:L.length,pr:0,none:0,merged:0,open:0,closed:0,link:{}};
+  function add(a,b){var k=a+">"+b;f.link[k]=(f.link[k]||0)+1}
+  L.forEach(function(i){
+    var st="closed",has=i.prs.length>0;
+    if(has){var m=i.prs.some(function(p){return p.state==="merged"}),o=i.prs.some(function(p){return p.state==="open"});
+      st=m?"merged":o?"open":"closed";i.prstate=st;f.pr++;f[st]++}
+    else{i.prstate="";f.none++}
+    var is=i.state==="closed"?"iclosed":"iopen";
+    add("filed",has?"haspr":"nopr");
+    if(has){add("haspr",st);add(st,is)}else add("nopr",is);
+  });
+  return f;
+}
+function sankey(){
+  var f=issueFlows(),svg=$("sankey");
+  if(!f.n){svg.innerHTML="";return}
+  var W=760,H=300,nw=14,top=20,pad=10,scale=(H-top-30-pad*3)/f.n;
+  var cols=[["filed"],["haspr","nopr"],["merged","open","closed"],["iopen","iclosed"]];
+  var def={filed:["Issues filed",css("--fg")],haspr:["Has a fix PR",css("--pass")],nopr:["No PR yet",css("--none")],
+    merged:["PR merged",css("--pass")],open:["PR open",css("--hang")],closed:["PR closed, not merged",css("--fail")],
+    iopen:["Issue open",css("--hang")],iclosed:["Issue closed",css("--pass")]};
+  var val={};Object.keys(def).forEach(function(k){val[k]=0});
+  Object.keys(f.link).forEach(function(k){var p=k.split(">");val[p[1]]+=f.link[k]});val.filed=f.n;
+  var xs=[0,(W-nw-170)/3,2*(W-nw-170)/3,W-nw-170],pos={};
+  cols.forEach(function(c,ci){var y=top;c.forEach(function(k){if(!val[k])return;pos[k]={x:xs[ci]+(ci?0:0),y:y,h:val[k]*scale,out:0,inn:0};y+=val[k]*scale+pad})});
+  var out=[],keys=Object.keys(f.link).sort(function(a,b){var A=a.split(">"),B=b.split(">");return pos[A[1]].y-pos[B[1]].y});
+  keys.forEach(function(k){var p=k.split(">"),a=pos[p[0]],b=pos[p[1]],v=f.link[k]*scale;
+    var y0=a.y+a.out,y1=b.y+b.inn;a.out+=v;b.inn+=v;
+    var x0=a.x+nw,x1=b.x,mx=(x0+x1)/2;
+    out.push('<path d="M'+x0+" "+y0+"C"+mx+" "+y0+" "+mx+" "+y1+" "+x1+" "+y1+"L"+x1+" "+(y1+v)+"C"+mx+" "+(y1+v)+" "+mx+" "+(y0+v)+" "+x0+" "+(y0+v)+'Z" fill="'+def[p[1]][1]+'" fill-opacity=".28"><title>'+def[p[0]][0]+" to "+def[p[1]][0]+": "+f.link[k]+"</title></path>")});
+  Object.keys(pos).forEach(function(k){var n=pos[k];
+    out.push('<rect x="'+n.x+'" y="'+n.y+'" width="'+nw+'" height="'+Math.max(n.h,1)+'" fill="'+def[k][1]+'"><title>'+def[k][0]+": "+val[k]+"</title></rect>");
+    out.push('<text x="'+(n.x+nw+6)+'" y="'+(n.y+Math.min(n.h,24)/2+4)+'" style="font-size:12px;fill:'+css("--fg")+'">'+def[k][0]+" ("+val[k]+")</text>")});
+  svg.innerHTML=out.join("");
+  $("isnote").textContent=f.n+" issues came from the corpus. "+f.pr+" have a linked fix pull request; "+f.merged+" of those are merged, "+f.open+" are open and "+f.closed+" were closed without merging. A pull request is linked when it mentions the issue. "+(D.issues.updated?"Checked "+D.issues.updated+".":"");
+}
+function issueTable(){
+  var L=(D.issues&&D.issues.issues)||[];
+  if(!L.length){$("istable").innerHTML="<tr><td>No issues yet.</td></tr>";return}
+  var h='<tr><th class="l">Issue</th><th class="l">Title</th><th>Items</th><th class="l">PR</th><th>State</th></tr>';
+  L.forEach(function(i){
+    var prs=i.prs.length?i.prs.map(function(p){return'<a href="'+esc(p.url)+'">#'+p.number+"</a> "+p.state}).join(", "):"none";
+    h+='<tr><td class="l" style="text-align:left"><a href="'+esc(i.url)+'">'+esc(i.repo.split("/")[1])+" #"+i.number+'</a></td><td style="text-align:left;white-space:normal;min-width:220px">'+esc(i.title)+"</td><td>"+i.items.length+'</td><td style="text-align:left">'+prs+"</td><td>"+esc(i.state)+"</td></tr>"});
+  $("istable").innerHTML=h;
+}
+function fixedSince(){
+  var F=D.fixed||{checked:0,groups:[]};
+  if(!F.checked){$("fxnote").textContent="No re-runs yet. When a failed item is checked again on a newer build and passes, it shows up here, grouped by cause.";$("fixed").innerHTML="";return}
+  var n=0;F.groups.forEach(function(g){n+=g.items.length});
+  $("fxnote").textContent=n+" of "+F.checked+" re-checked items that failed before now pass.";
+  var h='<tr><th class="l">Cause</th><th>Before</th><th>Now</th><th>Fixed</th><th class="l">Items</th></tr>';
+  F.groups.forEach(function(g){
+    var c=g.issue?'<a href="'+esc(g.issue)+'">'+esc(g.cause)+"</a>":esc(g.cause);
+    h+='<tr><td style="text-align:left;white-space:normal;min-width:220px">'+c+"</td><td>"+esc(g.from)+"</td><td>"+esc(g.to)+"</td><td>"+g.items.length+'</td><td style="text-align:left;white-space:normal">'+esc(g.items.slice(0,40).join(" "))+(g.items.length>40?" …":"")+"</td></tr>"});
+  $("fixed").innerHTML=h;
 }
 function shade(rate){var a=Math.min(1,.12+rate*.88);return"color-mix(in srgb, "+css("--fail")+" "+Math.round(a*100)+"%, transparent)"}
 function tally(){
@@ -278,7 +398,7 @@ function tables(){
     out+="</div></div>"});
   $("axes").innerHTML=out;
 }
-function all(){drawGrid();totals();trend();tables()}
+function all(){drawGrid();totals();tables();sankey();issueTable();fixedSince()}
 legend();buildPipes();wire();all();
 var rt;addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(drawGrid,100)});
 if(matchMedia)matchMedia("(prefers-color-scheme:dark)").addEventListener("change",all);

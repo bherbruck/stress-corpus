@@ -34,9 +34,11 @@ def check_line(rec, items, where):
                     + ", ".join(sorted(OUTCOMES)))
     if not isinstance(rec.get("version"), str) or not rec.get("version"):
         errs.append(f"{where}: \"version\" is missing; say which SolidCraft or Dutchman release you used")
-    for key in ("signature", "build", "link"):
+    for key in ("signature", "build", "link", "rerun_of"):
         if key in rec and not isinstance(rec[key], str):
             errs.append(f"{where}: \"{key}\" must be a string")
+    if "rerun_of" in rec and not (isinstance(rec["rerun_of"], str) and rec["rerun_of"].strip()):
+        errs.append(f"{where}: \"rerun_of\" must be a non-empty string, the earlier build this line re-checks")
     # A skipped item has no failure to describe, and a failure already filed upstream is described by its link.
     linked = isinstance(rec.get("link"), str) and rec["link"].startswith("https://")
     if outcome in OUTCOMES and outcome not in ("correct", "skipped", "correct-refusal") and not linked:

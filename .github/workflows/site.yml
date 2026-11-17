@@ -7,8 +7,13 @@ on:
       - "results/**"
       - "items.jsonl"
       - "tools/site.py"
+      - "tools/issues.py"
+      - "known.json"
       - ".github/workflows/site.yml"
   workflow_dispatch:
+  # Pull request and issue states change without new results, so refresh every day.
+  schedule:
+    - cron: "17 5 * * *"
   # A merge by the bot's token starts no push workflows, so also run after each bot merge.
   workflow_run:
     workflows: ["Merge results"]
@@ -34,6 +39,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Keep the last issue data as a fallback
+        run: curl -fsS -o site/issues.json https://dutchman-cad.github.io/stress-corpus/issues.json || true
+      - name: Read issue and pull request states
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/issues.py
       - name: Build the page
         run: python3 tools/site.py
       - uses: actions/upload-pages-artifact@v3
