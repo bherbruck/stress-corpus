@@ -88,7 +88,7 @@ You can do either or both. Say which in the results.
 | `correct-refusal` | It was refused, and `refusal_ok` is true. |
 | `wrong-refusal` | It was refused, but `refusal_ok` is false: the item is valid. |
 | `crash` | The program crashed or panicked. |
-| `hang` | It did not finish in a reasonable time. |
+| `hang` | It did not finish within 10 minutes. Stop it, record the step it stuck on as the signature, and go on to the next item. |
 | `skipped` | Not attempted. |
 
 Items with no `volume_mm3` cannot be called `correct` from the number alone: check the body count and look at the part, and say what you checked.
