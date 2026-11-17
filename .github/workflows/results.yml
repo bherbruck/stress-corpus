@@ -55,8 +55,10 @@ jobs:
             }
             for (const f of files.filter((f) => /^results\/batch-\d{2,3}\.jsonl$/.test(f.filename))) {
               const nn = parseInt(f.filename.match(/batch-(\d+)/)[1], 10);
-              const { data: found } = await github.rest.search.issuesAndPullRequests({ q: `repo:${context.repo.owner}/${context.repo.repo} is:issue label:batch in:title "Batch ${String(nn).padStart(2, '0')}:"` });
-              const issue = found.items[0];
+              // Batch NN is issue #NN (created in order). The search API it used before hit GitHub's secondary rate
+              // limit when several results PRs ran at once (2026-11-17), failing the check for no real reason.
+              const { data: cand } = await github.rest.issues.get({ ...context.repo, issue_number: nn }).catch(() => ({ data: null }));
+              const issue = cand && cand.title && cand.title.startsWith(`Batch ${String(nn).padStart(2, '0')}:`) ? cand : null;
               if (!issue) { errors.push(`${f.filename}: no batch issue ${nn}.`); continue; }
               const holders = issue.assignees.map((a) => a.login);
               // Someone who held the batch may still send results for it after /unclaim hands back the rest.
