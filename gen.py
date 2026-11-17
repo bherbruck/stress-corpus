@@ -838,7 +838,7 @@ def main(out="items.jsonl"):
 HEADER = (
     "Claim this batch by assigning it to yourself (or comment \"claiming\" and a maintainer will assign you). "
     "Tick each item as you finish it and close the issue when all are ticked. "
-    "Results go in `results/batch-%(nn)s.jsonl`; failures are filed separately, see the README.\n\n"
+    "Results go in `results/batch-%(nn)s.jsonl`; put each failure and its signature in the results, see the README.\n\n"
     "Placement: an item that ends in [rotated], [far] or [rotated + far] has one last step, applied to the whole finished part. "
     "Rotated: %(rot)s. Far: move everything %(far)d mm along +X, so the original origin lands at (%(far)d, 0, 0). "
     "Rotated + far: rotate first, then move.\n\n"
