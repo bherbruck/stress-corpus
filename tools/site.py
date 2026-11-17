@@ -180,6 +180,10 @@ canvas{display:block;width:100%;touch-action:manipulation}
 #tip{position:fixed;z-index:5;pointer-events:none;max-width:320px;background:var(--fg);color:var(--bg);padding:8px 10px;border-radius:6px;font-size:.85rem;display:none}
 #detail{min-height:4.5em;margin-top:8px;font-size:.92rem}
 .scroll{overflow-x:auto}
+#sankey .sl{font-size:12px;fill:var(--fg);paint-order:stroke;stroke:var(--card);stroke-width:3px}
+#sankey .sn{fill:var(--mut);font-weight:600}
+#sankey .sh{font-size:11px;fill:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+#sankey .sd{font-size:12px;fill:var(--mut)}
 table{border-collapse:collapse;font-size:.8rem}
 th,td{border:1px solid var(--line);padding:3px 5px;text-align:center;white-space:nowrap}
 th{font-weight:600;background:var(--card)}th.l{text-align:left}
@@ -210,7 +214,8 @@ svg text{fill:var(--mut);font-size:10px}
 
 <h2>Issues from the corpus</h2>
 <p class="mut" id="isnote"></p>
-<div class="card"><svg id="sankey" viewBox="0 0 760 300" width="100%" role="img" aria-label="Issues filed, how many have a fix pull request, and what became of those pull requests"></svg></div>
+<div class="card scroll"><svg id="sankey" viewBox="0 0 760 330" style="min-width:680px;width:100%;display:block" role="img" aria-label="Items run, their outcomes, failed items covered by issues, issues with a fix pull request, and the state of those pull requests"></svg></div>
+<p class="mut" id="swipe" style="font-size:13px;margin:4px 0 0">Swipe sideways on a narrow screen.</p>
 <div class="card scroll" style="margin-top:8px"><table id="istable"></table></div>
 
 <h2>Fixed since</h2>
@@ -316,42 +321,72 @@ function totals(){
   $("totals").innerHTML=cards.map(function(x){return"<div><span class=mut>"+x[0]+"</span><b>"+esc(x[1])+"</b></div>"}).join("");
   $("totnote").textContent="Done means built or refused, with an outcome other than skipped. Skipped tasks are left out of every rate.";
 }
-function issueFlows(){
-  var L=(D.issues&&D.issues.issues)||[],f={n:L.length,pr:0,none:0,merged:0,open:0,closed:0,link:{}};
-  function add(a,b){var k=a+">"+b;f.link[k]=(f.link[k]||0)+1}
+function flows(){
+  var L=(D.issues&&D.issues.issues)||[],R=D.results[cur]||{},f={run:0,pass:0,fail:0,skip:0,cov:0,unf:0,ni:0,pr:0,nopr:0,merged:0,open:0,closed:0};
+  var by={},hit={};
   L.forEach(function(i){
-    var st="closed",has=i.prs.length>0;
-    if(has){var m=i.prs.some(function(p){return p.state==="merged"}),o=i.prs.some(function(p){return p.state==="open"});
-      st=m?"merged":o?"open":"closed";i.prstate=st;f.pr++;f[st]++}
-    else{i.prstate="";f.none++}
-    var is=i.state==="closed"?"iclosed":"iopen";
-    add("filed",has?"haspr":"nopr");
-    if(has){add("haspr",st);add(st,is)}else add("nopr",is);
+    var st="";
+    if(i.prs.length){var m=i.prs.some(function(p){return p.state==="merged"}),o=i.prs.some(function(p){return p.state==="open"});st=m?"merged":o?"open":"closed"}
+    i.prstate=st;
+    (i.items||[]).forEach(function(id){(by[id]=by[id]||[]).push(i)});
   });
+  for(var k in R){var r=R[k][0],id=D.items[+k][0];f.run++;
+    if(r===6)f.skip++;else if(PASS[r])f.pass++;
+    else{f.fail++;if(by[id]){f.cov++;by[id].forEach(function(i){hit[i.url]=i})}else f.unf++}}
+  Object.keys(hit).forEach(function(u){var i=hit[u];f.ni++;if(i.prstate){f.pr++;f[i.prstate]++}else f.nopr++});
   return f;
 }
 function sankey(){
-  var f=issueFlows(),svg=$("sankey");
-  if(!f.n){svg.innerHTML="";return}
-  var W=760,H=300,nw=14,top=20,pad=10,scale=(H-top-30-pad*3)/f.n;
-  var cols=[["filed"],["haspr","nopr"],["merged","open","closed"],["iopen","iclosed"]];
-  var def={filed:["Issues filed",css("--fg")],haspr:["Has a fix PR",css("--pass")],nopr:["No PR yet",css("--none")],
-    merged:["PR merged",css("--pass")],open:["PR open",css("--hang")],closed:["PR closed, not merged",css("--fail")],
-    iopen:["Issue open",css("--hang")],iclosed:["Issue closed",css("--pass")]};
-  var val={};Object.keys(def).forEach(function(k){val[k]=0});
-  Object.keys(f.link).forEach(function(k){var p=k.split(">");val[p[1]]+=f.link[k]});val.filed=f.n;
-  var xs=[0,(W-nw-170)/3,2*(W-nw-170)/3,W-nw-170],pos={};
-  cols.forEach(function(c,ci){var y=top;c.forEach(function(k){if(!val[k])return;pos[k]={x:xs[ci]+(ci?0:0),y:y,h:val[k]*scale,out:0,inn:0};y+=val[k]*scale+pad})});
-  var out=[],keys=Object.keys(f.link).sort(function(a,b){var A=a.split(">"),B=b.split(">");return pos[A[1]].y-pos[B[1]].y});
-  keys.forEach(function(k){var p=k.split(">"),a=pos[p[0]],b=pos[p[1]],v=f.link[k]*scale;
-    var y0=a.y+a.out,y1=b.y+b.inn;a.out+=v;b.inn+=v;
-    var x0=a.x+nw,x1=b.x,mx=(x0+x1)/2;
-    out.push('<path d="M'+x0+" "+y0+"C"+mx+" "+y0+" "+mx+" "+y1+" "+x1+" "+y1+"L"+x1+" "+(y1+v)+"C"+mx+" "+(y1+v)+" "+mx+" "+(y0+v)+" "+x0+" "+(y0+v)+'Z" fill="'+def[p[1]][1]+'" fill-opacity=".28"><title>'+def[p[0]][0]+" to "+def[p[1]][0]+": "+f.link[k]+"</title></path>")});
-  Object.keys(pos).forEach(function(k){var n=pos[k];
-    out.push('<rect x="'+n.x+'" y="'+n.y+'" width="'+nw+'" height="'+Math.max(n.h,1)+'" fill="'+def[k][1]+'"><title>'+def[k][0]+": "+val[k]+"</title></rect>");
-    out.push('<text x="'+(n.x+nw+6)+'" y="'+(n.y+Math.min(n.h,24)/2+4)+'" style="font-size:12px;fill:'+css("--fg")+'">'+def[k][0]+" ("+val[k]+")</text>")});
+  var f=flows(),svg=$("sankey");
+  if(!f.run){svg.innerHTML="";return}
+  var W=760,H=330,nw=14,top=26,bot=8,lab=150,pad=10;
+  var cx=[0,0,0,0,0,0].map(function(_,i){return i*((W-nw-lab)/5)});
+  var avail=H-top-bot, ink=css("--fg"), out=[], pos={};
+  // items scale: tallest item column is stage 1 (everything); leave room for gaps and thin bands
+  var s1=(avail-pad*2-6)/f.run;
+  function band(k,x,y,v,s,name,col,txt){var h=Math.max(v*s,v?3:0);pos[k]={x:x,y:y,h:h,out:0,inn:0};
+    out.push('<rect x="'+x+'" y="'+y+'" width="'+nw+'" height="'+h+'" fill="'+col+'"><title>'+esc(name+": "+txt)+"</title></rect>");
+    out.push('<text x="'+(x+nw+6)+'" y="'+(y+Math.min(h,30)/2+4)+'" class="sl">'+esc(name)+' <tspan class="sn">'+esc(txt)+"</tspan></text>");return h}
+  function link(a,b,v,col,s,name){if(!v)return;var A=pos[a],B=pos[b],h=Math.max(v*s,1);
+    var y0=A.y+A.out,y1=B.y+B.inn;A.out+=h;B.inn+=h;var x0=A.x+nw,x1=B.x,mx=(x0+x1)/2;
+    out.push('<path d="M'+x0+" "+y0+"C"+mx+" "+y0+" "+mx+" "+y1+" "+x1+" "+y1+"L"+x1+" "+(y1+h)+"C"+mx+" "+(y1+h)+" "+mx+" "+(y0+h)+" "+x0+" "+(y0+h)+'Z" fill="'+col+'" fill-opacity=".3"><title>'+esc(name+": "+v)+"</title></path>")}
+  var n=function(v){return v.toLocaleString()};
+  var heads=["Items run","Outcome","Failed items","Issues","Fix PR?","PR state"];
+  heads.forEach(function(t,i){out.push('<text x="'+cx[i]+'" y="12" class="sh">'+t+"</text>")});
+  // stage 1
+  band("run",cx[0],top,f.run,s1,"Items run",ink,n(f.run));
+  // stage 2: pass, fail, skip (in this order, top to bottom)
+  var y=top;
+  y+=band("pass",cx[1],y,f.pass,s1,"Passed",css("--pass"),n(f.pass))+pad;
+  var yf=y;y+=band("fail",cx[1],y,f.fail,s1,"Failed",css("--fail"),n(f.fail))+pad;
+  band("skip",cx[1],y,f.skip,s1,"Skipped",css("--skip"),n(f.skip));
+  link("run","pass",f.pass,css("--pass"),s1,"Run to passed");link("run","fail",f.fail,css("--fail"),s1,"Run to failed");link("run","skip",f.skip,css("--skip"),s1,"Run to skipped");
+  // stage 3: covered / not yet filed, aligned with the failed band
+  y=yf;
+  y+=band("cov",cx[2],y,f.cov,s1,"Covered by an issue",css("--hang"),n(f.cov))+pad/2;
+  band("unf",cx[2],y,f.unf,s1,"Not yet filed",css("--none"),n(f.unf));
+  link("fail","cov",f.cov,css("--hang"),s1,"Failed to covered");link("fail","unf",f.unf,css("--none"),s1,"Failed to not yet filed");
+  // stage 4: the covered items land in issues; label is the issue count
+  y=pos.cov.y;
+  var h4=band("iss",cx[3],y,f.cov,s1,f.ni+(f.ni===1?" issue":" issues"),css("--hang"),n(f.cov)+" items");
+  link("cov","iss",f.cov,css("--hang"),s1,"Covered items to issues");
+  // unit change divider
+  var dx=cx[3]+nw+ (cx[4]-cx[3]-nw)/2;
+  out.push('<line x1="'+dx+'" x2="'+dx+'" y1="'+(top-4)+'" y2="'+H+'" stroke="'+css("--mut")+'" stroke-dasharray="4 4"/>');
+  out.push('<text x="'+dx+'" y="'+(H-12)+'" text-anchor="middle" class="sd">items → issues</text>');
+  // stages 5 and 6 count issues, own scale: the whole column is the issue count
+  var s2=Math.max(0.1,(avail-pad*3-40)/Math.max(f.ni,1));
+  var i0=top;
+  i0+=band("pr",cx[4],i0,f.pr,s2,"Has a fix PR",css("--pass"),n(f.pr)+" issues")+pad;
+  band("nopr",cx[4],i0,f.nopr,s2,"No PR yet",css("--none"),n(f.nopr)+" issues");
+  y=top;
+  y+=band("merged",cx[5],y,f.merged,s2,"Merged",css("--pass"),n(f.merged)+" issues")+pad;
+  y+=band("open",cx[5],y,f.open,s2,"Open",css("--hang"),n(f.open)+" issues")+pad;
+  band("closed",cx[5],y,f.closed,s2,"Closed unmerged",css("--fail"),n(f.closed)+" issues");
+  link("pr","merged",f.merged,css("--pass"),s2,"To merged");link("pr","open",f.open,css("--hang"),s2,"To open");link("pr","closed",f.closed,css("--fail"),s2,"To closed unmerged");
+  svg.setAttribute("viewBox","0 0 "+W+" "+H);
   svg.innerHTML=out.join("");
-  $("isnote").textContent=f.n+" issues came from the corpus. "+f.pr+" have a linked fix pull request; "+f.merged+" of those are merged, "+f.open+" are open and "+f.closed+" were closed without merging. A pull request is linked when it mentions the issue. "+(D.issues.updated?"Checked "+D.issues.updated+".":"");
+  $("isnote").textContent=n(f.run)+" items run: "+n(f.pass)+" passed, "+n(f.fail)+" failed, "+n(f.skip)+" skipped. "+n(f.cov)+" of the failed items are covered by "+f.ni+" issues and "+n(f.unf)+" are not yet filed. Left of the dashed line the bands count items; right of it they count issues. "+f.pr+" issues have a fix pull request: "+f.merged+" merged, "+f.open+" open, "+f.closed+" closed without merging. A fix pull request is one that says it fixes the issue or is cross-referenced from it. "+(D.issues.updated?"Checked "+D.issues.updated+".":"");
 }
 function issueTable(){
   var L=(D.issues&&D.issues.issues)||[];

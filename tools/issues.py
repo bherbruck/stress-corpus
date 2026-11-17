@@ -140,6 +140,14 @@ def linked_prs(api, repo, number):
                         "state": pr_state(src)}
         if len(events) < 100:
             break
+    for pr in prs.values():
+        if pr["state"] == "closed":  # the timeline can omit merged_at: ask the pull request itself
+            m = re.match(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)", pr["url"])
+            try:
+                if m and api.get(f"/repos/{m.group(1)}/pulls/{m.group(2)}").get("merged"):
+                    pr["state"] = "merged"
+            except Exception as e:  # keep "closed"
+                print(f"{pr['url']}: {e}", file=sys.stderr)
     return list(prs.values())
 
 
