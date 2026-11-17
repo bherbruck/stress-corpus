@@ -37,7 +37,9 @@ def check_line(rec, items, where):
     for key in ("signature", "build", "link"):
         if key in rec and not isinstance(rec[key], str):
             errs.append(f"{where}: \"{key}\" must be a string")
-    if outcome in OUTCOMES and outcome != "correct":
+    # A skipped item has no failure to describe, and a failure already filed upstream is described by its link.
+    linked = isinstance(rec.get("link"), str) and rec["link"].startswith("https://")
+    if outcome in OUTCOMES and outcome not in ("correct", "skipped", "correct-refusal") and not linked:
         sig = rec.get("signature")
         if not isinstance(sig, str) or not sig.strip():
             errs.append(f"{where}: outcome {outcome!r} needs a \"signature\": the first error or "

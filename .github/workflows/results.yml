@@ -57,7 +57,10 @@ jobs:
               const issue = found.items[0];
               if (!issue) { errors.push(`${f.filename}: no batch issue ${nn}.`); continue; }
               const holders = issue.assignees.map((a) => a.login);
-              if (!maintainer && !holders.includes(author)) errors.push(`${f.filename}: batch ${nn} (#${issue.number}) is claimed by ${holders.join(', ') || 'nobody'}; comment /claim on it first.`);
+              // Someone who held the batch may still send results for it after /unclaim hands back the rest.
+              const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, { ...context.repo, issue_number: issue.number, per_page: 100 });
+              const heldBefore = timeline.some((e) => e.event === 'assigned' && e.assignee && e.assignee.login === author);
+              if (!maintainer && !holders.includes(author) && !heldBefore) errors.push(`${f.filename}: batch ${nn} (#${issue.number}) is claimed by ${holders.join(', ') || 'nobody'}; comment /claim on it first.`);
               const range = issue.title.match(/S(\d+)\D+S(\d+)/);
               const fs = require('fs');
               if (range && fs.existsSync(f.filename)) {
