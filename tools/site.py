@@ -6,6 +6,8 @@ Reads items.jsonl and results/*.jsonl from the repository root. Standard library
 import glob
 import json
 import os
+import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 
@@ -17,6 +19,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AXES = ["operation", "surface", "topology", "gap", "placement", "scale", "order"]
 OUTCOMES = ["correct", "correct-refusal", "wrong-result", "wrong-refusal", "hang", "crash", "skipped"]
 BATCH = 100
+SNAPSHOT = "snapshot-2026-11-17"
+SNAPSHOT_LABEL = "Snapshot 2026-11-17 (SolidCraft 0.43.0)"
 REPO = "https://github.com/dutchman-cad/stress-corpus"
 
 
@@ -40,6 +44,7 @@ def build():
     rows = [[it["id"]] + [pos[a][it[a]] for a in AXES] + [short_brief(it.get("brief"))] for it in items]
 
     results = {}
+    builds = {}    # pipeline -> item index -> build of the newest re-run
     earlier = {}   # (pipeline, id) -> every first-run record
     reruns = []
     for path in sorted(glob.glob(os.path.join(ROOT, "results", "*.jsonl"))):
@@ -58,7 +63,10 @@ def build():
                     put(results, index, r)
     for r in reruns:  # a re-check is newer than the result it re-checks
         put(results, index, r)
+        builds.setdefault(r.get("pipeline") or "solidcraft", {})[str(index[r["id"]])] = (
+            r.get("build") or r.get("version") or "")
     issues = load_issues()
+    fixed = fixed_since(reruns, earlier, issues)
     return {
         "updated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "batch": BATCH,
@@ -68,9 +76,75 @@ def build():
         "items": rows,
         "results": results,
         "issues": issues,
-        "fixed": fixed_since(reruns, earlier, issues),
+        "fixed": fixed,
+        "compare": compare(index, results, builds, issues),
         "repo": REPO,
     }
+
+
+def snapshot_results(index):
+    """Results frozen in the snapshot tag, read with git show. None when the tag is not there."""
+    def git(*args):
+        return subprocess.run(["git", "-C", ROOT] + list(args), capture_output=True, text=True,
+                              encoding="utf-8", check=True).stdout
+    try:
+        names = [n for n in git("ls-tree", "-r", "--name-only", SNAPSHOT, "results/").split("\n")
+                 if n.endswith(".jsonl")]
+        blobs = [git("show", "%s:%s" % (SNAPSHOT, n)) for n in sorted(names)]
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    then, recs = {}, {}
+    for blob in blobs:
+        for line in blob.splitlines():
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            n = index.get(r.get("id"))
+            if n is None or r.get("outcome") not in OUTCOMES:
+                continue
+            pipe = r.get("pipeline") or "solidcraft"
+            put(then, index, r)
+            recs[(pipe, r["id"])] = r
+    return then, recs
+
+
+def newest_build(builds):
+    seen = {b for per in builds.values() for b in per.values() if b}
+    def key(b):
+        return [int(t) if t.isdigit() else 0 for t in re.findall(r"\d+", b)] + [b]
+    return max(seen, key=key) if seen else ""
+
+
+def compare(index, results, builds, issues):
+    """The snapshot against now: the per-cause table, and the data for the two grids."""
+    snap = snapshot_results(index)
+    if snap is None:
+        return None
+    then, recs = snap
+    known_urls = {k: str(v).split() for k, v in load_known(os.path.join(ROOT, "known.json")).items()}
+    titles = {i["url"]: "%s#%d %s" % (i["repo"].split("/")[1], i["number"], i["title"])
+              for i in issues.get("issues", [])}
+    ids = sorted(index, key=index.get)
+    causes = {}
+    for (pipe, iid), rec in recs.items():
+        if rec["outcome"] not in FAILURES:
+            continue
+        key, url, text = cause_of(rec, known_urls)
+        c = causes.setdefault((pipe, key), {"pipeline": pipe, "issue": url,
+                                            "cause": titles.get(url) or text or url,
+                                            "then": 0, "now": 0, "builds": set()})
+        c["then"] += 1
+        n = str(index[iid])
+        now = results.get(pipe, {}).get(n)
+        if now and now[0] in (0, 1):
+            c["now"] += 1
+            if builds.get(pipe, {}).get(n):
+                c["builds"].add(builds[pipe][n])
+    out = sorted(causes.values(), key=lambda c: (-c["then"], c["cause"]))
+    for c in out:
+        c["builds"] = sorted(c["builds"])
+    return {"label": SNAPSHOT_LABEL, "then": then, "builds": builds,
+            "newest": newest_build(builds), "causes": out}
 
 
 def put(results, index, r):
@@ -187,6 +261,15 @@ td.e{color:var(--mut)}
 .hb{display:grid;grid-template-columns:minmax(110px,170px) 1fr auto;gap:4px 8px;align-items:center;font-size:.85rem}
 .hb .t{background:var(--none);height:14px;border-radius:3px;overflow:hidden}.hb .t i{display:block;height:100%;background:var(--fail)}
 .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.cmpcols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:700px){.cmpcols{grid-template-columns:1fr}}
+.cmpcols h3{font-size:1rem;margin:0 0 6px}
+.cmpcols canvas{cursor:default}
+#regban{border-radius:8px;padding:12px 14px;font-weight:600;font-size:1.05rem;margin:8px 0;border:2px solid var(--pass);background:var(--card)}
+#regban.bad{border-color:var(--fail);background:var(--fail);color:#fff}
+#regban small{display:block;font-weight:400;font-size:.9rem}
+.ol{display:inline-block;width:12px;height:12px;border:2px solid var(--fg);vertical-align:-2px;margin-right:4px}
+.ol.r{border-color:var(--fail)}
 footer{margin:2em 0 1em;color:var(--mut);font-size:.9rem}
 svg text{fill:var(--mut);font-size:10px}
 </style>
@@ -213,6 +296,9 @@ svg text{fill:var(--mut);font-size:10px}
 <div class="card scroll"><svg id="sankey" viewBox="0 0 760 330" style="min-width:680px;width:100%;display:block" role="img" aria-label="Items run, their outcomes, failed items covered by issues, issues with a fix pull request, and the state of those pull requests"></svg></div>
 <p class="mut" id="swipe" style="font-size:13px;margin:4px 0 0">Swipe sideways on a narrow screen.</p>
 <div class="card scroll" style="margin-top:8px"><table id="istable"></table></div>
+
+<h2>Then vs now</h2>
+<div id="cmp"><p class="mut">No snapshot to compare with.</p></div>
 
 <h2>Fixed since</h2>
 <p class="mut" id="fxnote"></p>
@@ -430,9 +516,75 @@ function tables(){
     out+="</div></div>"});
   $("axes").innerHTML=out;
 }
-function all(){drawGrid();totals();tables();sankey();issueTable();fixedSince()}
+var CMP={};
+function cmpDraw(cv,wrap,get,mark){
+  var W=wrap.clientWidth,lab=W<300?18:24,cw=(W-lab)/B,ch=Math.max(cw,2),H=Math.ceil(ch*B),dpr=window.devicePixelRatio||1;
+  cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);cv.style.height=H+"px";
+  var g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  var col={pass:css("--pass"),fail:css("--fail"),hang:css("--hang"),none:css("--none"),skip:css("--skip"),mut:css("--mut"),fg:css("--fg"),card:css("--card")};
+  var gap=cw>=5?1:0,g2={lab:lab,cw:cw,ch:ch};
+  for(var n=0;n<N;n++){
+    var x=lab+(n%B)*cw,y=Math.floor(n/B)*ch,c=colour(get(n));
+    if(c[1]==="skip"){g.strokeStyle=col.skip;g.lineWidth=.6;g.strokeRect(x+.5,y+.5,Math.max(cw-gap-1,1),Math.max(ch-gap-1,1))}
+    else{g.fillStyle=col[c[1]];g.fillRect(x,y,cw-gap,ch-gap)}
+  }
+  if(mark){for(var n=0;n<N;n++){var m=mark(n);if(!m)continue;
+    var x=lab+(n%B)*cw,y=Math.floor(n/B)*ch,w=cw-gap,h=ch-gap;
+    if(m==="reg"){g.fillStyle=col.card;g.fillRect(x-1,y-1,w+2,h+2);g.strokeStyle=col.fail;g.lineWidth=2;g.strokeRect(x-.5,y-.5,w+1,h+1);
+      g.fillStyle=col.fail;g.fillRect(x+1.5,y+1.5,Math.max(w-3,1),Math.max(h-3,1))}
+    else{g.strokeStyle=col.fg;g.lineWidth=1.5;g.strokeRect(x-.25,y-.25,w+.5,h+.5)}}}
+  g.fillStyle=col.mut;g.font="9px system-ui,sans-serif";g.textBaseline="middle";g.textAlign="right";
+  for(var r=0;r<B;r+=(ch>=9?1:ch>=5?5:10)){var t=r+1;g.fillText(t<10?"0"+t:""+t,lab-3,r*ch+ch/2)}
+  return g2;
+}
+function cmpCell(cv,geo,ev){var rc=cv.getBoundingClientRect(),x=ev.clientX-rc.left-geo.lab,y=ev.clientY-rc.top;
+  if(x<0)return -1;var c=Math.floor(x/geo.cw),r=Math.floor(y/geo.ch);if(c<0||c>=B||r<0)return -1;var n=r*B+c;return n<N?n:-1}
+function compare(){
+  var C=D.compare,box=$("cmp");
+  if(!C){box.innerHTML='<p class="mut">No snapshot to compare with.</p>';return}
+  var T=(C.then&&C.then[cur])||{},R=D.results[cur]||{},BL=(C.builds&&C.builds[cur])||{};
+  var st={fixed:0,reg:0,still:0,rerun:0,notyet:0,thenFail:0,fixedIds:[],regIds:[]};
+  var chg={};
+  for(var k in T){var a=T[k][0],b=R[k]?R[k][0]:6;
+    if(BL[k])st.rerun++;
+    if(FAILS[a]){st.thenFail++;if(!BL[k])st.notyet++;
+      if(PASS[b]){st.fixed++;chg[k]="fix";st.fixedIds.push(+k)}else st.still++}
+    else if(PASS[a]&&FAILS[b]){st.reg++;chg[k]="reg";st.regIds.push(+k)}
+    else if(a!==b&&BL[k])chg[k]="chg"}
+  var newest=C.newest||"",any=st.rerun>0;
+  var ban=st.reg?'<div id="regban" class="bad" role="alert">'+st.reg+' regression'+(st.reg>1?"s":"")+': passed in the snapshot, fails now.<small>Outlined in red in the right grid and listed below.</small></div>'
+    :'<div id="regban" role="status">No regressions. Nothing that passed in the snapshot fails now.'+(any?"":'<small>Nothing has been re-run yet.</small>')+'</div>';
+  var h=ban;
+  h+=any?'<p class="mut">'+st.rerun+' items have been re-run on a newer build'+(newest?", the newest being "+esc(newest):"")+'. Items that were not re-run keep their snapshot result on the right.</p>'
+    :'<p><b>Nothing has been re-run yet, so the two grids are identical.</b> When failed items are re-run on a newer build, the right grid updates and the changed cells get an outline.</p>';
+  h+='<p class="legend mut"><span><i class="ol"></i>Changed since the snapshot</span><span><i class="ol r"></i>Regression</span></p>';
+  h+='<div class="cmpcols"><div class="card"><h3>'+esc(C.label)+'</h3><div id="cw1"><canvas id="c1" aria-label="Grid at the snapshot"></canvas></div></div>'
+    +'<div class="card"><h3>Now'+(newest?" ("+esc(newest)+")":"")+'</h3><div id="cw2"><canvas id="c2" aria-label="Grid now"></canvas></div></div></div>';
+  h+='<div class="tot" style="margin-top:12px">'+[["Failing, now passing",st.fixed],["Passing, now failing",st.reg],["Still failing",st.still],["Failed items re-run",st.thenFail-st.notyet+" of "+st.thenFail],["Failed items not yet re-run",st.notyet]].map(function(x){return"<div><span class=mut>"+x[0]+"</span><b>"+x[1]+"</b></div>"}).join("")+"</div>";
+  h+='<div id="reglist"></div>';
+  var cs=(C.causes||[]).filter(function(c){return c.pipeline===cur});
+  if(cs.length){h+='<h3 style="margin:1em 0 .3em;font-size:1rem">By cause</h3><div class="card scroll"><table><tr><th class="l">Issue or cause</th><th>Failing then</th><th>Now passing</th><th>Fixed by build</th></tr>';
+    cs.forEach(function(c){var t=c.issue?'<a href="'+esc(c.issue)+'">'+esc(c.cause)+"</a>":esc(c.cause);
+      h+='<tr><td style="text-align:left;white-space:normal;min-width:220px">'+t+"</td><td>"+c.then+"</td><td>"+c.now+"</td><td>"+(c.builds.length?esc(c.builds.join(", ")):"–")+"</td></tr>"});
+    h+="</table></div>"}
+  box.innerHTML=h;
+  var rl="";
+  if(st.reg){rl='<div class="card" style="border-color:var(--fail);margin-top:12px"><b>Regressions</b><ul style="margin:.4em 0 0;padding-left:1.2em">';
+    st.regIds.forEach(function(n){var r=R[n];rl+="<li>"+esc(D.items[n][0])+" · "+esc(NAMES[T[n][0]])+" then, "+esc(NAMES[r[0]])+" now"+(BL[n]?" on "+esc(BL[n]):"")+(r[1]?" · "+esc(r[1]):"")+"</li>"});
+    rl+="</ul></div>"}
+  $("reglist").innerHTML=rl;
+  var c1=$("c1"),c2=$("c2"),tip=$("tip");
+  var g1=cmpDraw(c1,$("cw1"),function(n){return T[n]},null);
+  var g2=cmpDraw(c2,$("cw2"),function(n){return R[n]},function(n){var m=chg[n];return m==="reg"?"reg":m?"chg":null});
+  [[c1,g1],[c2,g2]].forEach(function(p){
+    p[0].addEventListener("mousemove",function(e){var n=cmpCell(p[0],p[1],e);if(n<0){tip.style.display="none";return}
+      var a=T[n],b=R[n];tip.innerHTML="<b>"+esc(D.items[n][0])+"</b><br>Then: "+esc(a?NAMES[a[0]]:"Not started")+"<br>Now: "+esc(b?NAMES[b[0]]:"Not started")+(BL[n]?" ("+esc(BL[n])+")":"");
+      tip.style.display="block";var x=e.clientX+14,y=e.clientY+14;if(x+330>innerWidth)x=Math.max(4,e.clientX-334);if(y+100>innerHeight)y=e.clientY-90;tip.style.left=x+"px";tip.style.top=y+"px"});
+    p[0].addEventListener("mouseleave",function(){tip.style.display="none"})});
+}
+function all(){drawGrid();totals();tables();sankey();issueTable();compare();fixedSince()}
 legend();buildPipes();wire();all();
-var rt;addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(drawGrid,100)});
+var rt;addEventListener("resize",function(){clearTimeout(rt);rt=setTimeout(function(){drawGrid();compare()},100)});
 if(matchMedia)matchMedia("(prefers-color-scheme:dark)").addEventListener("change",all);
 </script>
 </body>
