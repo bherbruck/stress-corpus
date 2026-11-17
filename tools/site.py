@@ -19,8 +19,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AXES = ["operation", "surface", "topology", "gap", "placement", "scale", "order"]
 OUTCOMES = ["correct", "correct-refusal", "wrong-result", "wrong-refusal", "hang", "crash", "skipped"]
 BATCH = 100
-SNAPSHOT = "snapshot-2026-11-17"
-SNAPSHOT_LABEL = "Snapshot 2026-11-17 (SolidCraft 0.43.0)"
+SNAPSHOT = "before-stress-test"
+SNAPSHOT_LABEL = "Before stress test (2026-11-17, SolidCraft 0.43.0)"
 REPO = "https://github.com/dutchman-cad/stress-corpus"
 
 
@@ -297,8 +297,8 @@ svg text{fill:var(--mut);font-size:10px}
 <p class="mut" id="swipe" style="font-size:13px;margin:4px 0 0">Swipe sideways on a narrow screen.</p>
 <div class="card scroll" style="margin-top:8px"><table id="istable"></table></div>
 
-<h2>Then vs now</h2>
-<div id="cmp"><p class="mut">No snapshot to compare with.</p></div>
+<h2>Before stress test vs now</h2>
+<div id="cmp"><p class="mut">No before-stress-test results to compare with.</p></div>
 
 <h2>Fixed since</h2>
 <p class="mut" id="fxnote"></p>
@@ -541,7 +541,7 @@ function cmpCell(cv,geo,ev){var rc=cv.getBoundingClientRect(),x=ev.clientX-rc.le
   if(x<0)return -1;var c=Math.floor(x/geo.cw),r=Math.floor(y/geo.ch);if(c<0||c>=B||r<0)return -1;var n=r*B+c;return n<N?n:-1}
 function compare(){
   var C=D.compare,box=$("cmp");
-  if(!C){box.innerHTML='<p class="mut">No snapshot to compare with.</p>';return}
+  if(!C){box.innerHTML='<p class="mut">No before-stress-test results to compare with.</p>';return}
   var T=(C.then&&C.then[cur])||{},R=D.results[cur]||{},BL=(C.builds&&C.builds[cur])||{};
   var st={fixed:0,reg:0,still:0,rerun:0,notyet:0,thenFail:0,fixedIds:[],regIds:[]};
   var chg={};
@@ -552,13 +552,13 @@ function compare(){
     else if(PASS[a]&&FAILS[b]){st.reg++;chg[k]="reg";st.regIds.push(+k)}
     else if(a!==b&&BL[k])chg[k]="chg"}
   var newest=C.newest||"",any=st.rerun>0;
-  var ban=st.reg?'<div id="regban" class="bad" role="alert">'+st.reg+' regression'+(st.reg>1?"s":"")+': passed in the snapshot, fails now.<small>Outlined in red in the right grid and listed below.</small></div>'
-    :'<div id="regban" role="status">No regressions. Nothing that passed in the snapshot fails now.'+(any?"":'<small>Nothing has been re-run yet.</small>')+'</div>';
+  var ban=st.reg?'<div id="regban" class="bad" role="alert">'+st.reg+' regression'+(st.reg>1?"s":"")+': passed before the stress test, fails now.<small>Outlined in red in the right grid and listed below.</small></div>'
+    :'<div id="regban" role="status">No regressions. Nothing that passed before the stress test fails now.'+(any?"":'<small>Nothing has been re-run yet.</small>')+'</div>';
   var h=ban;
-  h+=any?'<p class="mut">'+st.rerun+' items have been re-run on a newer build'+(newest?", the newest being "+esc(newest):"")+'. Items that were not re-run keep their snapshot result on the right.</p>'
+  h+=any?'<p class="mut">'+st.rerun+' items have been re-run on a newer build'+(newest?", the newest being "+esc(newest):"")+'. Items that were not re-run keep their before-stress-test result on the right.</p>'
     :'<p><b>Nothing has been re-run yet, so the two grids are identical.</b> When failed items are re-run on a newer build, the right grid updates and the changed cells get an outline.</p>';
-  h+='<p class="legend mut"><span><i class="ol"></i>Changed since the snapshot</span><span><i class="ol r"></i>Regression</span></p>';
-  h+='<div class="cmpcols"><div class="card"><h3>'+esc(C.label)+'</h3><div id="cw1"><canvas id="c1" aria-label="Grid at the snapshot"></canvas></div></div>'
+  h+='<p class="legend mut"><span><i class="ol"></i>Changed since before the stress test</span><span><i class="ol r"></i>Regression</span></p>';
+  h+='<div class="cmpcols"><div class="card"><h3>'+esc(C.label)+'</h3><div id="cw1"><canvas id="c1" aria-label="Grid before the stress test"></canvas></div></div>'
     +'<div class="card"><h3>Now'+(newest?" ("+esc(newest)+")":"")+'</h3><div id="cw2"><canvas id="c2" aria-label="Grid now"></canvas></div></div></div>';
   h+='<div class="tot" style="margin-top:12px">'+[["Failing, now passing",st.fixed],["Passing, now failing",st.reg],["Still failing",st.still],["Failed items re-run",st.thenFail-st.notyet+" of "+st.thenFail],["Failed items not yet re-run",st.notyet]].map(function(x){return"<div><span class=mut>"+x[0]+"</span><b>"+x[1]+"</b></div>"}).join("")+"</div>";
   h+='<div id="reglist"></div>';
