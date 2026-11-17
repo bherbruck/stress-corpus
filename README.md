@@ -1,5 +1,7 @@
 # Stress corpus
 
+Results at a glance: https://dutchman-cad.github.io/stress-corpus/ (every task as a pass, fail or not-started cell, with the fail rate per batch and per axis).
+
 10,000 small modelling tasks, each one a plain sentence with real millimetre sizes. Build them in SolidCraft and/or Fusion, convert with Dutchman, compare the results, and record every failure in a results pull request. The goal is to find and fix bugs.
 
 The tasks come from what a modelling kernel has to handle, not from a list of objects: an operation, on a type of surface, in a tricky topology situation, at a given distance from the exact contact, at an unusual scale, in a particular order, and placed in an awkward spot. A few items carry an everyday object name ("Like a ring: ...") as flavour only.
