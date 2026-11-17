@@ -374,6 +374,9 @@ def op_step(op, b, e, scale):
         return "Make a separate Ø%s mm cylinder, %s mm long, lying along the Y axis with its axis %s mm below the %s at %s, and subtract it from the body." % (
             fmt(2 * d), fmt(8 * d), fmt(d / 2.0), F, C)
     if op == "boolean intersect":
+        if b["su"] == "torus":
+            return ("Make a separate sphere of Ø%s mm centred on %s, and keep only the intersection of the body with it." % (
+                fmt(1.2 * b["Wmin"]), C))
         return ("Make a separate sphere of Ø%s mm centred on the body's bounding-box centre, and keep only the intersection of the body with it." % (
             fmt(1.2 * math.sqrt(b["Wmin"] ** 2 + b["H"] ** 2))))
     if op == "thread":
