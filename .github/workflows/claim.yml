@@ -35,7 +35,8 @@ jobs:
               // Two open batches each; collaborators with write access, who have shown they finish batches, may hold
               // up to six (Ray, 2026-11-17: "he can claim 5+ if he wants, he's legit working through them").
               const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({ owner: context.repo.owner, repo: context.repo.repo, username: user }).catch(() => ({ data: { permission: 'none' } }));
-              const cap = ['admin', 'maintain', 'write'].includes(perm.permission) ? 6 : 2;
+              const trusted = ['theironchef'];  // proven builders, before or without accepting a collaborator invite
+              const cap = ['admin', 'maintain', 'write'].includes(perm.permission) || trusted.includes(user) ? 6 : 2;
               if (open.length >= cap) {
                 await say(`@${user}, you already hold ${open.length} open batches (${open.map((i) => '#' + i.number).join(', ')}). Close one before claiming another.`);
                 return;
