@@ -60,6 +60,20 @@ class Cluster(unittest.TestCase):
         groups = cluster.cluster(cluster.load_failures([GOOD], ITEMS))
         self.assertEqual(sorted(len(v) for v in groups.values()), [1, 2])
 
+    def test_no_paths_or_raw_numbers_in_title(self):
+        import re
+        groups = cluster.cluster(cluster.load_failures([GOOD], ITEMS))
+        for key, recs in groups.items():
+            text = cluster.draft(key, recs, ITEMS)
+            self.assertIsNone(re.search(r"(?<![\w<])/[\w.]", text), text)
+            title = text.splitlines()[0]
+            self.assertNotIn("x.sc", text)
+            self.assertNotIn("77", title)
+            self.assertNotIn("4412", title)
+        key = next(k for k, v in groups.items() if len(v) == 2)
+        title = cluster.draft(key, groups[key], ITEMS).splitlines()[0]
+        self.assertIn("edge N not found in <file>", title)
+
     def test_draft_and_known(self):
         groups = cluster.cluster(cluster.load_failures([GOOD], ITEMS))
         key = next(k for k, v in groups.items() if len(v) == 2)

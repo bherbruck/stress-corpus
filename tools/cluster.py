@@ -40,6 +40,15 @@ def normalise(sig):
     return s
 
 
+def display(sig):
+    """Normalised signature for a title: paths become <file>, numbers become N."""
+    return normalise(sig).replace("<path>", "<file>").replace("<n>", "N").replace("<id>", "N").replace("<item>", "N")
+
+
+def strip_paths(text):
+    return _PATH.sub("<file>", text)
+
+
 def kind(outcome):
     return "wrong result" if outcome == "wrong-result" else outcome
 
@@ -84,10 +93,13 @@ def draft(key, recs, items):
     rep = smallest(list(members.values()))
     ids = sorted(members)
     sample = next(r for r in recs if r["id"] == rep["id"])["signature"]
-    op = sample.split(" @ ", 1)[1].strip() if " @ " in sample else rep["operation"]
-    lines = [f"Title: {outcome} in {op}: {sample.split(' @ ')[0].strip()[:80]} ({rep['id']})",
+    norm = display(sample)
+    msg, _, op = norm.partition(" @ ")
+    op = op or rep["operation"]
+    lines = [f"Title: {outcome} in {op}: {msg[:80]} ({rep['id']})",
              f"Repo: {REPOS.get(pipeline, pipeline)}",
-             f"Key: {key}", "",
+             f"Key: {key}",
+             f"Example message: {strip_paths(sample)}", "",
              f"### Smallest failing item: {rep['id']}", "", rep["brief"], "",
              f"Expected: {json.dumps(rep['expected'])}", "",
              "### Items it covers", "", f"{len(ids)} item(s): " + ", ".join(ids), "",
