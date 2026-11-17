@@ -56,6 +56,35 @@ class Cluster(unittest.TestCase):
         self.assertEqual(a, b)
         self.assertNotIn("4412", a)
 
+    def test_coordinates_do_not_split_a_cause(self):
+        msgs = [
+            "relating failed: the edge from (12.123456789, -3.5, 0) to (1.25, 2, 3.000000001) of the other b-rep",
+            "relating failed: the edge from (7, 8.5, -0.123456789) to (4.987654321, 5, 6) of the other b-rep",
+            "relating failed: the edge from [1, 2, 3] to (4,5,6) of the other b-rep",
+        ]
+        keys = {cluster.normalise(m) for m in msgs}
+        self.assertEqual(len(keys), 1, keys)
+        key = keys.pop()
+        self.assertIn("the edge from <point> to <point>", key)
+        self.assertNotIn("<id>", key)
+        # A real id still reads as an id, and a different message stays a different group.
+        self.assertIn("<id>", cluster.normalise("body deadbeef12 failed"))
+        self.assertNotEqual(cluster.normalise("the edge at (1, 2, 3) is smooth"),
+                            cluster.normalise("the edge at (1, 2, 3) is too short"))
+
+    def test_normalise_is_idempotent_and_old_keys_still_match(self):
+        sig = "a round of radius 0.123456789 mm on the edge at (1.5, 2, 3) is too small @ solid.fillet"
+        n = cluster.normalise(sig)
+        self.assertEqual(cluster.normalise(n), n)
+        old = "solidcraft | wrong-refusal | a round of radius <n>.<id> mm on the edge at (<n>, <n>, <n>) is too small @ solid.fillet"
+        self.assertEqual(cluster.rekey(old), "solidcraft | wrong-refusal | " + n)
+        with tempfile.TemporaryDirectory() as d:
+            kp = os.path.join(d, "known.json")
+            with open(kp, "w") as w:
+                json.dump({old: "https://example.invalid/2"}, w)
+            self.assertEqual(cluster.load_known(kp), {"solidcraft | wrong-refusal | " + n: "https://example.invalid/2"})
+        self.assertIn("(x, y, z)", cluster.display(sig))
+
     def test_groups_by_cause(self):
         groups = cluster.cluster(cluster.load_failures([GOOD], ITEMS))
         self.assertEqual(sorted(len(v) for v in groups.values()), [1, 2])

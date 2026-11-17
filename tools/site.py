@@ -10,7 +10,7 @@ import sys
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cluster import display, kind, normalise  # noqa: E402
+from cluster import display, kind, load_known, normalise  # noqa: E402
 from common import FAILURES  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -100,11 +100,7 @@ def cause_of(rec, known_urls):
 
 def fixed_since(reruns, earlier, issues):
     """Items that failed on an earlier build and pass on the build a re-run used."""
-    try:
-        with open(os.path.join(ROOT, "known.json"), encoding="utf-8") as f:
-            known_urls = {k: str(v).split() for k, v in json.load(f).items()}
-    except (OSError, ValueError):
-        known_urls = {}
+    known_urls = {k: str(v).split() for k, v in load_known(os.path.join(ROOT, "known.json")).items()}
     titles = {i["url"]: "%s#%d %s" % (i["repo"].split("/")[1], i["number"], i["title"])
               for i in issues.get("issues", [])}
     groups, checked, still = {}, 0, 0

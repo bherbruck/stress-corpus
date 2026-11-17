@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from common import FAILURES, ROOT, load_items  # noqa: E402
-from cluster import kind, normalise  # noqa: E402
+from cluster import kind, load_known, normalise  # noqa: E402
 
 SEARCH_REPOS = ["tangency-labs/solidcraft", "dutchman-cad/dutchman", "cadmpeg/cadmpeg"]
 OWN_REPO = "dutchman-cad/stress-corpus"
@@ -40,12 +40,7 @@ def cause_key(r):
 
 
 def known_map():
-    path = os.path.join(ROOT, "known.json")
-    try:
-        with open(path, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, ValueError):
-        return {}
+    return load_known(os.path.join(ROOT, "known.json"))
 
 
 def sources():
