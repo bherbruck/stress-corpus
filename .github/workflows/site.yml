@@ -13,7 +13,8 @@ on:
   workflow_dispatch:
   # Pull request and issue states change without new results, so refresh every day.
   schedule:
-    - cron: "17 5 * * *"
+    # Hourly, so issue and PR states upstream (fixes merging, issues closing) show without anyone asking (2026-11-17).
+    - cron: "17 * * * *"
   # A merge by the bot's token starts no push workflows, so also run after each bot merge.
   workflow_run:
     workflows: ["Merge results"]
