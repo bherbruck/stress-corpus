@@ -69,7 +69,7 @@ A separate `scripts.jsonl` with a runnable command script for each item is plann
 
 1. Open the issues labelled `batch`. Each is a batch of 100 items: "Batch 07: S0601–S0700".
 2. Claim one by commenting `/claim` on it (or "claiming"). A bot assigns you at once; no repo access is needed. Hold at most two open batches at a time. Comment `/unclaim` to give a batch back.
-3. Work through the items. When your results PR merges, a bot ticks every item that has a result.
+3. Work through the items and open a results PR. When its checks pass it merges by itself, and a bot ticks every item that has a result.
 4. A maintainer closes the batch when every item has a result.
 
 ## Two ways to build an item
