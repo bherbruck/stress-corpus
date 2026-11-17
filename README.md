@@ -144,7 +144,7 @@ Add these fields to a failing line (`correct` lines may carry `measured` and `bu
 
 A check runs on every results pull request (`python3 tools/check_results.py`). It rejects unknown IDs, outcomes or pipelines, a missing signature, a duplicate line, a `correct` whose volume or body count differs from `expected` (volume tolerance 1e-6 relative), and a `wrong-result` whose measured volume and body count match. Run it before you push.
 
-Maintainers run `python3 tools/cluster.py --known known.json`. It groups failures by pipeline and normalised signature (numbers, ids and paths removed), picks the smallest item in each group, and prints an issue draft: the brief, every item ID in the group, the axis values the group shares, and counts by version. After filing, the issue URL is added to `known.json` under the cluster's key, and that cluster is skipped from then on.
+Maintainers run `python3 tools/cluster.py --known known.json`. It groups failures by pipeline and normalised signature (numbers, ids and paths removed, and coordinates such as `(x, y, z)` written as `<point>`, so an edge named by its position doesn't split one cause into a group per position), picks the smallest item in each group, and prints an issue draft: the brief, every item ID in the group, the axis values the group shares, and counts by version. After filing, the issue URL is added to `known.json` under the cluster's key, and that cluster is skipped from then on.
 
 If something looks odd and does not fit a results line, open an issue here and describe it. Do not file `correct-refusal` results as bugs: they are expected.
 

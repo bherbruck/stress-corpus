@@ -6,7 +6,10 @@ Usage: python3 tools/cluster.py [--known known.json] [--results DIR_OR_FILE ...]
 Grouping key: pipeline, outcome kind, and the normalised signature. A signature is
 "<first message> @ <failing operation or command>"; numbers, ids, hex values and
 paths are stripped so the same cause written with different sizes lands together.
-known.json maps a signature key (as printed in each draft) to the upstream issue URL.
+Coordinates, written as (x, y, z) or [x, y, z], become <point>, so a message that names
+an edge or point by where it is does not split one cause into a group per position.
+known.json maps a signature key (as printed in each draft) to the upstream issue URL;
+keys written by an older normaliser are normalised again on load, so they still match.
 """
 import argparse
 import collections
@@ -28,21 +31,51 @@ _UUID = re.compile(r"\b[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}\b")
 _NUM = re.compile(r"[-+]?\b\d+(?:\.\d+)?(?:[eE][-+]?\d+)?\b|[-+]?\.\d+")
 
 
+# A decimal such as 12.123456789 must become one <n>: numbers go before hex ids, which would
+# otherwise take its long fraction for an id. "<n>.<id>" is what older keys hold for one.
+_OLD_DECIMAL = re.compile(r"<n>\.<id>")
+_POINT = re.compile(r"[(\[]\s*<n>(?:\s*,\s*<n>){1,2}\s*[)\]]")
+
+
 def normalise(sig):
     s = sig.strip()
     s = _UUID.sub("<id>", s)
     s = _PATH.sub("<path>", s)
     s = _ITEM.sub("<item>", s)
-    s = _HEX.sub("<id>", s)
     s = _NUM.sub("<n>", s)
+    s = _HEX.sub("<id>", s)
     s = re.sub(r"(?<=[A-Za-z_])\d+\b", "<n>", s)
+    s = _OLD_DECIMAL.sub("<n>", s)
+    s = _POINT.sub("<point>", s)
     s = re.sub(r"\s+", " ", s).strip().lower()
     return s
 
 
+def rekey(key):
+    """A known.json key in the current normal form (its message part normalised again)."""
+    parts = key.split(" | ", 2)
+    if len(parts) < 3:
+        return key
+    return " | ".join(parts[:2] + [normalise(parts[2])])
+
+
+def load_known(path):
+    """known.json as {key in the current normal form: value}; {} when it is missing or not JSON."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for k, v in raw.items():
+        out.setdefault(rekey(k), v)
+    return out
+
+
 def display(sig):
     """Normalised signature for a title: paths become <file>, numbers become N."""
-    return normalise(sig).replace("<path>", "<file>").replace("<n>", "N").replace("<id>", "N").replace("<item>", "N")
+    return (normalise(sig).replace("<path>", "<file>").replace("<point>", "(x, y, z)")
+            .replace("<n>", "N").replace("<id>", "N").replace("<item>", "N"))
 
 
 def strip_paths(text):
@@ -126,10 +159,7 @@ def main(argv=None):
     ap.add_argument("--known", help="JSON file mapping signature key to upstream issue URL")
     ap.add_argument("results", nargs="*", help="results files (default: results/*.jsonl)")
     a = ap.parse_args(argv)
-    known = {}
-    if a.known:
-        with open(a.known, encoding="utf-8") as f:
-            known = json.load(f)
+    known = load_known(a.known) if a.known else {}
     items = load_items()
     groups = cluster(load_failures(result_files(a.results), items))
     shown = skipped = 0
