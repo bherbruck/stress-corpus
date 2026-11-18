@@ -50,5 +50,7 @@
  "solidcraft | wrong-refusal | smlib draft: operation: the offset is refused: its offset's loops cross in a way the offset cannot resolve: the results are not merged, so the walls the loops come from are not cut where they cross; only a merged offset cuts them @ solid.draft": "https://github.com/tangency-labs/solidcraft/issues/18629 https://github.com/tangency-labs/solidcraft/issues/18805",
  "solidcraft | wrong-refusal | body `part`: the operation failed: smlib boolean: smlib's check refuses the result: <n> failed tests: smface::test #<n> face crosses seam: face boundary illegally crosses a surface seam. [owner smface] @ solid.cylinder": "https://github.com/tangency-labs/solidcraft/issues/18804",
  "solidcraft | wrong-refusal | smlib shell: operation: the offset is refused: the wall reaches half the width between two opposite faces of a boss; the largest wall that fits is <n> @ solid.shell": "https://github.com/tangency-labs/solidcraft/issues/18239",
- "solidcraft | wrong-refusal | smlib draft: operation: the offset is refused: the body built is not a manifold solid, as its input was @ solid.draft": "https://github.com/tangency-labs/solidcraft/issues/18805"
+ "solidcraft | wrong-refusal | smlib draft: operation: the offset is refused: the body built is not a manifold solid, as its input was @ solid.draft": "https://github.com/tangency-labs/solidcraft/issues/18805",
+ "solidcraft | hang | no result within <n> s @ solid.cylinder": "https://github.com/tangency-labs/solidcraft/issues/18809",
+ "solidcraft | hang | no result within <n> s @ solid.box": "https://github.com/tangency-labs/solidcraft/issues/18809"
 }
