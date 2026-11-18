@@ -270,6 +270,9 @@ td.e{color:var(--mut)}
 #regban small{display:block;font-weight:400;font-size:.9rem}
 .ol{display:inline-block;width:12px;height:12px;border:2px solid var(--fg);vertical-align:-2px;margin-right:4px}
 .ol.r{border-color:var(--fail)}
+
+.take ol{margin:.4em 0 .8em 1.2em;padding:0}
+.take li{margin:.25em 0}
 footer{margin:2em 0 1em;color:var(--mut);font-size:.9rem}
 svg text{fill:var(--mut);font-size:10px}
 </style>
@@ -278,6 +281,17 @@ svg text{fill:var(--mut);font-size:10px}
 <main>
 <h1>Stress corpus results</h1>
 <p class="mut">10,000 small modelling tasks, one per cell, in ID order. Each row is one batch of 100. Red is a bug found; grey is not tried yet.</p>
+
+<h2>Take part</h2>
+<div class="card take">
+<p>Anyone can help, with or without an AI assistant, and no repo access is needed. Each batch is 100 small modelling tasks; build them, record what happened, and every failure becomes a bug report with the exact recipe attached.</p>
+<ol>
+<li><a href="@@REPO@@/issues?q=is%3Aissue+is%3Aopen+label%3Abatch+no%3Aassignee">Pick an open batch</a> and comment <code>/claim</code> on it. A bot assigns you at once.</li>
+<li>Build the items in SolidCraft, by hand or with the generated scripts (<a href="@@REPO@@#two-ways-to-build-an-item">two ways to build an item</a>).</li>
+<li>Open a results PR. When its checks pass it merges by itself, and this page updates within the hour.</li>
+</ol>
+<p><a href="@@REPO@@">Repository</a> &middot; <a href="@@REPO@@#take-part">How to take part</a> &middot; <a href="@@REPO@@#record-results">Recording results</a> &middot; <a href="https://discord.gg/yTcseBEdeu">Questions: #stress-corpus on Discord</a></p>
+</div>
 
 <div class="bar"><span class="seg" id="pipes" role="group" aria-label="Pipeline"></span>
 <span class="legend" id="legend"></span></div>
